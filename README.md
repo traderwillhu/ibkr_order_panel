@@ -1,6 +1,6 @@
 # IB Order Panel
 
-A professional trading panel application for Interactive Brokers (IB) with a modern GUI interface. This modular version has been refactored from a single-file application (1649 lines) into well-organized modules for better maintainability and extensibility.
+A professional trading panel application for Interactive Brokers (IB) with a modern GUI interface.
 
 ## ⚠️ Disclaimer
 
