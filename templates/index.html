@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IB Trading Terminal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; background-color: #f8f9fa; }
+        .terminal-box { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .status-connected { color: #28a745; }
+        .status-disconnected { color: #dc3545; }
+        #log { height: 200px; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="terminal-box">
+                    <h2 class="text-center mb-4">Interactive Brokers Trading Terminal</h2>
+
+                    <div class="row mb-3">
+                        <div class="col">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>Connection Status:</span>
+                                <span id="connectionStatus" class="status-disconnected">Disconnected</span>
+                                <button id="connectBtn" class="btn btn-sm btn-primary">Connect to TWS</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="ticker" class="form-label">Ticker Symbol</label>
+                            <input type="text" class="form-control" id="ticker" value="AAPL">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="quantity" class="form-label">Quantity</label>
+                            <input type="number" class="form-control" id="quantity" value="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="stopPrice" class="form-label">Stop Price</label>
+                            <input type="number" step="0.01" class="form-control" id="stopPrice" value="90.00">
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button id="executeBtn" class="btn btn-success" disabled>Execute Trade (Buy + Stops)</button>
+                    </div>
+
+                    <div class="mt-4">
+                        <h5>Execution Log</h5>
+                        <div id="log"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const connectBtn = document.getElementById('connectBtn');
+        const executeBtn = document.getElementById('executeBtn');
+        const statusEl = document.getElementById('connectionStatus');
+        const logEl = document.getElementById('log');
+
+        function logMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Handle connection
+        connectBtn.addEventListener('click', async () => {
+            connectBtn.disabled = true;
+            connectBtn.textContent = 'Connecting...';
+
+            const response = await fetch('/connect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (data.status === 'connecting') {
+                // Check connection status periodically
+                const checkInterval = setInterval(async () => {
+                    const res = await fetch('/connect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    const status = await res.json();
+
+                    if (status.status === 'connected') {
+                        clearInterval(checkInterval);
+                        statusEl.className = 'status-connected';
+                        statusEl.textContent = 'Connected';
+                        connectBtn.style.display = 'none';
+                        executeBtn.disabled = false;
+                        logMessage('Successfully connected to TWS');
+                    }
+                }, 1000);
+            }
+        });
+
+        // Handle trade execution
+        executeBtn.addEventListener('click', async () => {
+            const ticker = document.getElementById('ticker').value;
+            const quantity = document.getElementById('quantity').value;
+            const stopPrice = document.getElementById('stopPrice').value;
+
+            executeBtn.disabled = true;
+            executeBtn.textContent = 'Executing...';
+            logMessage(`Starting trade for ${quantity} shares of ${ticker} with stop at ${stopPrice}`);
+
+            try {
+                const response = await fetch('/execute_trade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        quantity: quantity,
+                        stopPrice: stopPrice
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    logMessage(`Error: ${result.error}`);
+                } else {
+                    logMessage(`Trade executed successfully at average price: ${result.avgPrice}`);
+                    logMessage(`Stop orders placed at: ${result.stopPrices.join(', ')}`);
+                    logMessage(`With quantities: ${result.quantities.join(', ')}`);
+                }
+            } catch (error) {
+                logMessage(`Error: ${error.message}`);
+            } finally {
+                executeBtn.disabled = false;
+                executeBtn.textContent = 'Execute Trade (Buy + Stops)';
+            }
+        });
+    </script>
+</body>
+</html>

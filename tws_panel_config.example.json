@@ -1,0 +1,17 @@
+{
+  "risk_percent": "0.25",
+  "hotkey_refresh": "Return",
+  "hotkey_place_order": "F1",
+  "watchlist": [
+    "TSLA",
+    "NVDA",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "META",
+    "SPY",
+    "QQQ"
+  ],
+  "port": "7496"
+}
+
