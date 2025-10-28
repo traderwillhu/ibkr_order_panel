@@ -210,6 +210,65 @@ class IBConnector:
 
                 return True, f"{action} {qty} shares of {ticker} at ${avg_fill_price:.2f}. 1 stop-loss order submitted at ${stop_price:.2f}."
 
+            elif order_type == 'Market + 3 Stops + OCO':
+                # Place market order
+                market_order = MarketOrder(action, qty)
+                trade = self.ib.placeOrder(contract, market_order)
+                while trade.isActive():
+                    self.ib.sleep(1)
+
+                if trade.orderStatus.status != 'Filled':
+                    return False, "Market order was not filled."
+
+                avg_fill_price = trade.orderStatus.avgFillPrice
+                price_diff = avg_fill_price - stop_price if action == 'BUY' else stop_price - avg_fill_price
+
+                # Calculate the 3 stop prices
+                stop_prices = [
+                    round(stop_price + price_diff * 2 / 3, 2) if action == 'BUY' else round(stop_price - price_diff * 2 / 3, 2),
+                    round(stop_price + price_diff * 1 / 3, 2) if action == 'BUY' else round(stop_price - price_diff * 1 / 3, 2),
+                    round(stop_price, 2)
+                ]
+                # Calculate sizes: 1/3 for OCO, remaining 2/3 divided between the other stops
+                oco_qty = qty // 3
+                remaining_qty = qty - oco_qty
+                stop_sizes = [remaining_qty // 2, remaining_qty - remaining_qty // 2]
+
+                # Calculate 2R price (target price for limit sell)
+                if action == 'BUY':
+                    target_price = round(avg_fill_price + 2 * price_diff, 2)
+                    oco_stop_price = stop_prices[0]  # Highest stop (closest to entry)
+                else:
+                    target_price = round(avg_fill_price - 2 * price_diff, 2)
+                    oco_stop_price = stop_prices[0]  # Highest stop
+                
+                # Create OCO group ID (unique identifier for the OCO pair)
+                oca_group = f"OCO_{int(time.time() * 1000)}"
+
+                # Create limit sell order (target at 2R)
+                limit_order = LimitOrder('SELL' if action == 'BUY' else 'BUY', oco_qty, target_price, tif='GTC')
+                limit_order.ocaGroup = oca_group
+                limit_order.ocaType = 1  # One-Cancels-Other
+                
+                # Create stop order (highest stop)
+                oco_stop_order = StopOrder('SELL' if action == 'BUY' else 'BUY', oco_qty, oco_stop_price, tif='GTC')
+                oco_stop_order.ocaGroup = oca_group
+                oco_stop_order.ocaType = 1  # One-Cancels-Other
+
+                # Place OCO orders
+                self.ib.placeOrder(contract, limit_order)
+                self.ib.sleep(0.2)
+                self.ib.placeOrder(contract, oco_stop_order)
+                self.ib.sleep(0.5)
+
+                # Place the remaining 2 stop orders for the rest of the position
+                for i in range(1, 3):  # Only the second and third stops
+                    stop_order = StopOrder('SELL' if action == 'BUY' else 'BUY', stop_sizes[i-1], stop_prices[i], tif='GTC')
+                    self.ib.placeOrder(contract, stop_order)
+                    self.ib.sleep(0.5)
+
+                return True, f"{action} {qty} shares of {ticker} at ${avg_fill_price:.2f}. OCO (Limit@${target_price:.2f}/Stop@${oco_stop_price:.2f}) + 2 stops submitted."
+
             elif order_type == 'Market Order':
                 market_order = MarketOrder(action, qty)
                 trade = self.ib.placeOrder(contract, market_order)

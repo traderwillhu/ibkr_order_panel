@@ -143,6 +143,7 @@ class TradingTab:
         order_type_combo = ttk.Combobox(root, textvariable=self.order_type_var, state='readonly',
             values=[
                 'Market + 3 Stops',
+                'Market + 3 Stops + OCO',
                 'Market + 1 Stop',
                 '3 Stops Only',
                 'Market Order',
